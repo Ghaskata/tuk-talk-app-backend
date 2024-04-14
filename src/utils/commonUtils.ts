@@ -1,4 +1,7 @@
 import { Request, Response } from "express";
+import mongoose from "mongoose";
+const { Schema, model } = mongoose;
+const { ObjectId } = mongoose.Types;
 
 const sendSuccess = async (
   req: Request,
@@ -18,7 +21,7 @@ const sendError = async (
   return res.status(statusCode).send(data);
 };
 
-const routeArray = (_array: any, prefix: any, isAdmin: false) => {
+const routeArray = (_array: any, prefix: any, isAdmin: Boolean = false) => {
   _array.forEach((route: any) => {
     const path = route.path;
     const controller = route.controller;
@@ -57,10 +60,21 @@ const generateRandomString = (length: number) => {
   return result;
 };
 
+const convertToObjectId = (id: string) => {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return null;
+  }
+  const objId = new mongoose.Types.ObjectId(id);
+  return objId;
+};
 
 export default {
   sendSuccess,
   sendError,
   routeArray,
-  generateRandomString
+  generateRandomString,
+  convertToObjectId,
+  Schema,
+  model,
+  ObjectId,
 };

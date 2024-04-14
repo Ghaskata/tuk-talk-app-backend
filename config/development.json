@@ -1,3 +1,10 @@
 {
-  "DATABASE_URI": "mongodb+srv://archana:archana123@cluster0.bszkqmy.mongodb.net/"
+  "PORT": 7000,
+  "DB_CONN_STRING": "mongodb+srv://archana:archana123@cluster0.bszkqmy.mongodb.net/",
+  "ROUTE_URL": "http://localhost:7000",
+  "JWT_ACCESS_SECRET": "44993d20455a60d514aaa49719d0ba9ae110458bcb472f4df2078015a7748607847454126059dad83a12cd4dd48c24cb41cd8a974fe0e7e62578beceb4e0247f",
+  "JWT_REFRESH_SECRET": "584b53cd06599840bfa8e2eaefc510f6afd1b1fa71970c6c7f3312d99b6f4c8bf62f8f5dfdff5ec0d280f42071b59df476860b3c0c1f901fc05195835eaeffb0",
+  "JWT_ACCESS_TIME": "30d",
+  "ADMIN_JWT_ACCESS_TIME": "30d",
+  "JWT_REFRESH_TIME": "30d"
 }
