@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import verifyToken from "../middleware/validations";
 import mongoose from "mongoose";
 const { Schema, model } = mongoose;
 const { ObjectId } = mongoose.Types;
@@ -33,8 +34,10 @@ const routeArray = (_array: any, prefix: any, isAdmin: Boolean = false) => {
     if (!isPublic) {
       if (isAdmin) {
         // for verifing admin verify accesstoken middleware push in middleware
+        middleware.push(route.authMiddleware ?? verifyToken.verifyAccessToken);
       }
       // for  veriingy user verify accesstoken middleware push in middleware
+      middleware.push(route.authMiddleware ?? verifyToken.verifyAccessToken);
     }
 
     if (Array.isArray(validation)) {

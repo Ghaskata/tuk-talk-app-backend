@@ -1,7 +1,26 @@
-import mongoose from "mongoose";
+import mongoose, { Date, Document } from "mongoose";
 import { AppConstants } from "../../../utils/appConstants";
+const bcrypt = require("bcryptjs");
 
-const userSchema = new mongoose.Schema(
+export interface UserDocument extends Document {
+  userName?: string | null;
+  about?: string | null;
+  sessionId?: string | null;
+  email: string;
+  mobile: string;
+  password: string;
+  image?: string | null;
+  userStatus: number;
+  blockType: number;
+  refreshToken: string;
+
+  createdAt: string;
+  updatedAt: string;
+
+  isPasswordCorrect(password: string): Promise<boolean>;
+}
+
+const userSchema = new mongoose.Schema<UserDocument>(
   {
     userName: {
       type: String,
@@ -49,8 +68,27 @@ const userSchema = new mongoose.Schema(
       require: false,
       default: 0, // 1 violat entry, 2 admin block, 3 chat block
     },
+    refreshToken: {
+      type: String,
+    },
   },
   { timestamps: true }
 );
 
-export const User = mongoose.model(AppConstants.MODEL_USER, userSchema);
+userSchema.pre("save", async function (next) {
+  if (!this.isModified(this.password)) {
+    return next();
+  }
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
+  next();
+});
+
+userSchema.methods.isPasswordCorrect = async function (password: string) {
+  return await bcrypt.compare(password, this.password);
+};
+
+export const User = mongoose.model<UserDocument>(
+  AppConstants.MODEL_USER,
+  userSchema
+);
