@@ -5,6 +5,7 @@ import commonUtils from "../../../utils/commonUtils";
 import { AppStrings } from "../../../utils/appStrings";
 import { loginHistory } from "../models/loginHistory.model";
 import Auth from "../../../auth";
+import { UserTokenPayload } from "../../../auth/models";
 const DeviceDetector = require("node-device-detector");
 const moment = require("moment");
 
@@ -14,6 +15,28 @@ const detector = new DeviceDetector({
   deviceAliasCode: false,
 });
 
+// REGISTER USER TOKEN API
+const register = async (req: Request, res: Response) => {
+  try {
+    const { userName, about, email, mobile, password } = req.body;
+
+    const createdUser = await User.create({
+      userName,
+      about,
+      email,
+      mobile,
+      password,
+    });
+
+    return commonUtils.sendSuccess(req, res, createdUser, 201);
+  } catch (error) {
+    return commonUtils.sendError(req, res, {
+      error: AppStrings.SOMETHING_WENT_WRONG,
+    });
+  }
+};
+
+// LOGIN USER API
 const login = async (req: Request, res: Response) => {
   try {
     const ipAdd = req.ip?.split(":").pop();
@@ -97,12 +120,9 @@ const login = async (req: Request, res: Response) => {
     };
     return commonUtils.sendSuccess(req, res, responseData, 200);
   } catch (error: any) {
-    return commonUtils.sendError(
-      req,
-      res,
-      { error: AppStrings.SOMETHING_WENT_WRONG },
-      200
-    );
+    return commonUtils.sendError(req, res, {
+      error: AppStrings.SOMETHING_WENT_WRONG,
+    });
   }
 };
 
@@ -126,4 +146,99 @@ const userLoginHistory = async (
   }
 };
 
-export default { login };
+// FORGET USER PASSWORD API
+const forgetPassword = async (req: Request, res: Response) => {
+  // try {
+  //   const user: any = await User.findOne({ email: req.body.email });
+  //   if (!user) {
+  //     return commonUtils.sendError(
+  //       req,
+  //       res,
+  //       { message: AppStrings.EMAIL_NOT_EXISTS },
+  //       409
+  //     );
+  //   }
+  //   let otp = commonUtils.generateOtpCode(user.email);
+  //   return commonUtils.sendSuccess(req, res, otp);
+  // } catch (error) {
+  //   return commonUtils.sendError(req, res, {
+  //     error: AppStrings.SOMETHING_WENT_WRONG,
+  //   });
+  // }
+};
+
+// RESET PASSWORD USER PASSWORD API
+const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { password } = req.body;
+    const payloadData: UserTokenPayload = res.locals.payload.sub;
+    console.log("payloadData : ", payloadData);
+
+    const UserExist: any = await User.findById(payloadData.userId);
+    if (!UserExist) {
+      return commonUtils.sendError(
+        req,
+        res,
+        { message: AppStrings.USER_NOT_FOUND },
+        409
+      );
+    }
+
+    const valid_password = await UserExist.isPasswordCorrect(password);
+
+    if (valid_password) {
+      return commonUtils.sendError(
+        req,
+        res,
+        { message: AppStrings.NEW_PASSWORD_DIFFERENT },
+        409
+      );
+    }
+    // const updatedPassword = await User.findByIdAndUpdate(
+    //   UserExist._id,
+    //   {
+    //     $set: {
+    //       password: password,
+    //     },
+    //   },
+    //   { new: true }
+    // );
+
+    UserExist.password = password;
+
+    await UserExist.save();
+
+    return commonUtils.sendSuccess(req, res, {
+      message: AppStrings.PASSWORD_CHANGE_SUUCESSFULL,
+    });
+  } catch (error) {
+    return commonUtils.sendError(req, res, {
+      error: AppStrings.SOMETHING_WENT_WRONG,
+    });
+  }
+};
+
+// REFRESH USER TOKEN API
+const refreshToken = async (req: Request, res: Response) => {
+  try {
+    const payload: UserTokenPayload = res.locals.payload;
+    const tokenData = await Auth.generateUserAccessToken(payload);
+    res.cookie("accessToken", tokenData.accessToken, {
+      maxAge: 900000,
+      httpOnly: true,
+      secure: true,
+    });
+    res.cookie("refreshToken", tokenData.refreshToken, {
+      maxAge: 900000,
+      httpOnly: true,
+      secure: true,
+    });
+    return commonUtils.sendSuccess(req, res, { tokenData });
+  } catch (error) {
+    return commonUtils.sendError(req, res, {
+      error: AppStrings.SOMETHING_WENT_WRONG,
+    });
+  }
+};
+
+export default { login, forgetPassword, resetPassword, refreshToken, register };

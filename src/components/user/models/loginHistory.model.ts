@@ -4,7 +4,7 @@ import { AppConstants } from "../../../utils/appConstants";
 const loginHistorySchema = new mongoose.Schema(
   {
     userId: {
-      type: new mongoose.Types.ObjectId(),
+      type: mongoose.Schema.ObjectId,
       ref: "users",
       default: null,
     },

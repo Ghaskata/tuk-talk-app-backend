@@ -4,9 +4,41 @@ const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
 });
-type loginInput = z.infer<typeof loginSchema>;
 
+const forgotPassSchema = z.object({
+  email: z.string().email(),
+});
 
-export {
-    loginSchema,loginInput
-}
+const resetPassSchema = z.object({
+  password: z.string().min(6),
+});
+
+const registerSchema = z.object({
+  userName: z
+    .string()
+    .optional()
+    .transform((value) => !value || value.trim()),
+  about: z
+    .string()
+    .optional()
+    .transform((value) => !value || value.trim()),
+  email: z.string().email(),
+  mobile: z
+    .string()
+    .optional()
+    .refine((value) => !value || /^\d{10}$/.test(value), {
+      message: "Mobile number must be 10 digits long",
+    }),
+  password: z
+    .string()
+    .min(6)
+    .refine(
+      (value) => /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{6,}$/.test(value),
+      {
+        message:
+          "Password must be at least 6 characters long and contain at least one lowercase letter, one uppercase letter, and one digit",
+      }
+    ),
+});
+
+export { loginSchema, forgotPassSchema, resetPassSchema, registerSchema };

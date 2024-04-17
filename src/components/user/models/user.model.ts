@@ -1,6 +1,6 @@
-import mongoose, { Date, Document } from "mongoose";
+import mongoose, {  Document } from "mongoose";
 import { AppConstants } from "../../../utils/appConstants";
-const bcrypt = require("bcryptjs");
+const bcrypt = require("bcrypt");
 
 export interface UserDocument extends Document {
   userName?: string | null;
@@ -76,7 +76,7 @@ const userSchema = new mongoose.Schema<UserDocument>(
 );
 
 userSchema.pre("save", async function (next) {
-  if (!this.isModified(this.password)) {
+  if (!this.isModified('password')) {
     return next();
   }
   const salt = await bcrypt.genSalt(10);

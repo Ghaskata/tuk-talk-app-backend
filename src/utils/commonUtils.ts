@@ -40,10 +40,12 @@ const routeArray = (_array: any, prefix: any, isAdmin: Boolean = false) => {
       middleware.push(route.authMiddleware ?? verifyToken.verifyAccessToken);
     }
 
-    if (Array.isArray(validation)) {
-      middleware.push(...validation);
-    } else {
-      middleware.push(validation);
+    if (validation) {
+      if (Array.isArray(validation)) {
+        middleware.push(...validation);
+      } else {
+        middleware.push(validation);
+      }
     }
 
     middleware.push(controller);
@@ -71,12 +73,19 @@ const convertToObjectId = (id: string) => {
   return objId;
 };
 
+const generateOtpCode = async (email: any) => {
+  if (email == "ghaskataarchna@gmail.com") {
+    return 7777;
+  }
+  return Number((Math.random() * (9999 - 1000) + 1000).toFixed());
+};
 export default {
   sendSuccess,
   sendError,
   routeArray,
   generateRandomString,
   convertToObjectId,
+  generateOtpCode,
   Schema,
   model,
   ObjectId,

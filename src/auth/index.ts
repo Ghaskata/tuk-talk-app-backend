@@ -39,8 +39,6 @@ const register = async (email: any, otp: any) => {
   return { accessToken };
 };
 
-
-
 export default {
   generateUserAccessToken,
 };
