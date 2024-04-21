@@ -230,7 +230,7 @@ const refreshToken = async (req: Request, res: Response) => {
     });
     res.cookie("refreshToken", tokenData.refreshToken, {
       maxAge: 900000,
-      httpOnly: true,
+      httpOnly: true, 
       secure: true,
     });
     return commonUtils.sendSuccess(req, res, { tokenData });
