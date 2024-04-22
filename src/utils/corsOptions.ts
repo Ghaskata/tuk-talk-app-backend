@@ -7,7 +7,7 @@ const allowedOrigins = [
   "http://localhost:7002",
 ];
 
-const corsOptions = {
+export const corsOptions = {
   origin: (origin: any, callback: Function) => {
     if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
       callback(null, true);

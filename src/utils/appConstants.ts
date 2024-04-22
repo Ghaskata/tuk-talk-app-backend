@@ -1,3 +1,5 @@
+import { ConnectedUser } from "../components/chat/connectedUser";
+
 const config = require("config");
 
 export const AppConstants = {
@@ -9,3 +11,8 @@ export const AppConstants = {
 
   MODEL_CHAT: "Chat",
 };
+
+export class SocketAppConstants {
+  public static connectedUsers: { [key: string]: string } = {};
+  public static userMap: { [userKey: string]: ConnectedUser } = {};
+}

@@ -8,6 +8,7 @@ const mongoose = require("mongoose");
 const cookieParser = require("cookie-parser");
 const config = require("config");
 const cors = require("cors");
+const userMap: any = {};
 
 process.on("uncaughtException", (error, origin) => {
   console.log("----- Uncaught exception -----");
@@ -53,7 +54,7 @@ app.get("/", (req: Request, res: Response) => {
   res.send("server running");
 });
 
-app.listen(config.get("PORT"), () => {
+server.listen(config.get("PORT"), () => {
   console.log(`server started at http://localhost:${config.get("PORT")}`);
 
   mongoose
@@ -62,7 +63,6 @@ app.listen(config.get("PORT"), () => {
     .catch((err: any) => console.log("🛑 mongodb not connected"));
 
   io.on("connection", (args: Socket) => connectionHandler(io, args));
-
 });
 
-export { io };
+export { io, userMap };
