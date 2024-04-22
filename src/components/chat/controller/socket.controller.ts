@@ -5,6 +5,8 @@ import { userMap } from "../../..";
 import { User } from "../../user/models/user.model";
 import commonUtils from "../../../utils/commonUtils";
 import { Chat } from "../chat.model";
+import mongoose, { deleteModel } from "mongoose";
+import moment from "moment";
 
 export const connectionHandler = async (io: Server, client: Socket) => {
   let usersCount = 0;
@@ -64,27 +66,103 @@ export const connectionHandler = async (io: Server, client: Socket) => {
           userStatus: 0,
         }).select("userName about image");
 
+        const senderObjId = commonUtils.convertToObjectId(userId);
+        const sender = await User.findById(senderObjId);
+
         if (reciverExist) {
-          let chat = await Chat.create({
+          let chat: any = await Chat.create({
             senderId: userId,
             reciverId: reciverId,
-            parentChatId: parentChatId && parentChatId,
+            parentChatId: parentChatId,
             message: message,
             msgType: msgType ? msgType : 1,
           });
 
-          chat = JSON.parse(JSON.stringify(chat));
+          chat = JSON.parse(JSON.stringify(chat)); //deep clone it not change original but cretae new one that deeply cloned orignale
 
-          // chat.reciverName=reciverExist.userName
-          // const chatResponse = {
-          //   ...chat.toObject(),
-          //   reciverName: reciverExist.userName,
-          //   reciverImage: reciverExist.image,
-          // };
+          // chat.reciverName = reciverExist.userName;
+          // chat.reciverImage = reciverExist.image;
+          chat.senderImage = reciverExist.userName;
+          chat.senderImage = reciverExist.image;
+
+          if (chat.parentChatId) {
+            let oldChat = await Chat.aggregate([
+              {
+                $match: {
+                  _id: new mongoose.Types.ObjectId(parentChatId),
+                },
+              },
+              {
+                $lookup: {
+                  from: "users",
+                  localField: "parentChatId",
+                  foreignField: "_id",
+                  as: "users",
+                },
+              },
+              {
+                $unwind: {
+                  path: "users",
+                  preserveNullAndEmptyArrays: true,
+                },
+              },
+              {
+                $project: {
+                  createdAt: {
+                    $dateToString: {
+                      format: "%Y-%m-%d %H:%M:%S", // Customize the format here
+                      date: "$createdAt",
+                    },
+                  },
+                  message: "$message",
+                },
+              },
+            ]);
+            chat.parentChat = oldChat?.[0];
+          }
+
+          client.to(reciverId.toString()).emit("chatMessage", chat);
+          console.log({ chat });
+          ack(chat);
         }
       }
     } catch (error) {
       console.log("chatMessage event Error >>>>> ", error);
+    }
+  });
+
+  // -----------------------------------deleteMessage----------------------------------
+  client.on("deleteMessage", async function (data: any, ack: any) {
+    if (typeof data === "string") data = JSON.parse(data);
+
+    const userId = SocketAppConstants.connectedUsers[client.id];
+
+    const { chat_id } = data;
+    try {
+      let chat: any = await Chat.findOne({
+        _id: new mongoose.Types.ObjectId(chat_id),
+      });
+
+      if (chat && chat.senderId == userId) {
+        const deletedChat = await Chat.findByIdAndUpdate(
+          chat._id,
+          {
+            $set: {
+              deletedAt: moment(),
+            },
+          },
+          {
+            new: true,
+          }
+        );
+
+        client.to(chat.senderId).emit("deleteMessage", chat);
+        ack(chat);
+      } else {
+        ack("");
+      }
+    } catch (error) {
+      console.log("delete Message event Error >>>>> ", error);
     }
   });
 };
