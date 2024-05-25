@@ -1,4 +1,4 @@
-import mongoose, {  Document } from "mongoose";
+import mongoose, { Document } from "mongoose";
 import { AppConstants } from "../../../utils/appConstants";
 const bcrypt = require("bcrypt");
 
@@ -12,6 +12,7 @@ export interface UserDocument extends Document {
   image?: string | null;
   userStatus: number;
   blockType: number;
+  socialId?: string;
   refreshToken: string;
 
   createdAt: string;
@@ -68,6 +69,10 @@ const userSchema = new mongoose.Schema<UserDocument>(
       require: false,
       default: 0, // 1 violat entry, 2 admin block, 3 chat block
     },
+    socialId: {
+      type: String,
+      require: false,
+    },
     refreshToken: {
       type: String,
     },
@@ -76,7 +81,7 @@ const userSchema = new mongoose.Schema<UserDocument>(
 );
 
 userSchema.pre("save", async function (next) {
-  if (!this.isModified('password')) {
+  if (!this.isModified("password")) {
     return next();
   }
   const salt = await bcrypt.genSalt(10);

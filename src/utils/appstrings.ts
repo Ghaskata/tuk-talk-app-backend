@@ -11,7 +11,6 @@ export const AppStrings = {
   EMAIL_NOT_REG: "Email is Not registered",
   EMAIL_NOT_EXISTS: "Email does not exist.",
 
-
   NEW_PASSWORD_DIFFERENT:
   "New password must be different from previously used password",
   PASSWORD_CHANGE_SUUCESSFULL: "Your Password Changed Successfully.",

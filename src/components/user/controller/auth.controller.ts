@@ -20,6 +20,12 @@ const register = async (req: Request, res: Response) => {
   try {
     const { userName, about, email, mobile, password } = req.body;
 
+    const UserExist = await User.findOne({ email: email });
+    if (UserExist) {
+      return commonUtils.sendError(req, res, {
+        message: "email is already exist",
+      });
+    }
     const createdUser = await User.create({
       userName,
       about,
@@ -222,6 +228,8 @@ const resetPassword = async (req: Request, res: Response) => {
 const refreshToken = async (req: Request, res: Response) => {
   try {
     const payload: UserTokenPayload = res.locals.payload;
+    console.log("--------------------------");
+    console.log("payload in refreshtoken >>>>> ", payload);
     const tokenData = await Auth.generateUserAccessToken(payload);
     res.cookie("accessToken", tokenData.accessToken, {
       maxAge: 900000,
@@ -230,7 +238,7 @@ const refreshToken = async (req: Request, res: Response) => {
     });
     res.cookie("refreshToken", tokenData.refreshToken, {
       maxAge: 900000,
-      httpOnly: true, 
+      httpOnly: true,
       secure: true,
     });
     return commonUtils.sendSuccess(req, res, { tokenData });
@@ -241,4 +249,100 @@ const refreshToken = async (req: Request, res: Response) => {
   }
 };
 
-export default { login, forgetPassword, resetPassword, refreshToken, register };
+// SOCIAL LOGIN API
+const socialLogin = async (req: Request, res: Response) => {
+  try {
+    const ipAdd = req.ip?.split(":").pop();
+    const currentdate = moment();
+    const sessionId = randomUUID();
+    const userAgent = req.get("User-Agent");
+    const result = detector.detect(userAgent);
+    const browserName = `${result.os.name} ${result.client.type} ${result.client.name}`;
+
+    const { email, userName, mobile, image, googleId } = req.body;
+
+    let userExist: any = await User.findOne({ email: email });
+    let tokenData;
+    if (userExist) {
+      if (userExist.userStatus === 1) {
+        return commonUtils.sendError(
+          req,
+          res,
+          { message: AppStrings.USER_DEACTIVE_ACCOUNT },
+          409
+        );
+      }
+      tokenData = await Auth.generateUserAccessToken({
+        userId: userExist._id,
+        createdAt: userExist.createdAt,
+      });
+    } else {
+      userExist = await User.create({
+        email,
+        userName,
+        sessionId,
+        mobile,
+        image,
+        socialId: googleId,
+      });
+      tokenData = await Auth.generateUserAccessToken({
+        userId: userExist._id,
+        createdAt: userExist.createdAt,
+      });
+    }
+
+    const data = await userLoginHistory(
+      userExist._id,
+      ipAdd,
+      currentdate,
+      browserName,
+      req.headers.host
+    );
+    if (data === "history not created.") {
+      return commonUtils.sendError(req, res, {
+        message: AppStrings.SOMETHING_WENT_WRONG,
+      });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userExist._id,
+      {
+        $set: { sessionId: sessionId, refreshToken: tokenData.refreshToken },
+      },
+      { new: true }
+    );
+
+    res.cookie("accessToken", tokenData.accessToken, {
+      httpOnly: true,
+      secure: true,
+    });
+    res.cookie("refreshToken", tokenData.refreshToken, {
+      httpOnly: true,
+      secure: true,
+    });
+
+    const responseData = {
+      accessToken: tokenData.accessToken,
+      refreshToken: tokenData.refreshToken,
+      userData: {
+        email: email,
+        _id: updatedUser?._id,
+      },
+    };
+    return commonUtils.sendSuccess(req, res, responseData);
+  } catch (error: any) {
+    console.log("error >> ", error);
+    return commonUtils.sendError(req, res, {
+      error: AppStrings.SOMETHING_WENT_WRONG,
+    });
+  }
+};
+
+export default {
+  login,
+  forgetPassword,
+  resetPassword,
+  refreshToken,
+  register,
+  socialLogin,
+};

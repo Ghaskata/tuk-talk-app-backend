@@ -41,4 +41,12 @@ const registerSchema = z.object({
     ),
 });
 
-export { loginSchema, forgotPassSchema, resetPassSchema, registerSchema };
+const updateProfileSchema = z.object({
+  userName: z
+    .string()
+    .trim()
+    .min(3),
+  about: z.string().trim().min(1)
+});
+
+export { loginSchema, forgotPassSchema, resetPassSchema, registerSchema,updateProfileSchema };
