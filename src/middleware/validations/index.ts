@@ -57,11 +57,16 @@ const verifyAccessToken = async (
   //   token
   // );
   try {
-    const decodedPayload = await _verifyUserToken(
+    // const decodedPayload = await _verifyUserToken(
+    //   token,
+    //   UserTokenRole.accessToken
+    // );
+    const decodedPayload = await jwt.verify(
       token,
-      UserTokenRole.accessToken
+      config.get("JWT_ACCESS_SECRET"),
+      { audience: UserTokenRole.accessToken }
     );
-    res.locals.payload = decodedPayload;
+    res.locals.payload = decodedPayload.sub;
     next();
   } catch (error: any) {
     return commonUtils.sendError(req, res, { error: error.message }, 401);
@@ -74,7 +79,8 @@ const verifyRefreshToken = async (
   next: NextFunction
 ) => {
   // let token = req.headers?.Authorization ?? "";
-  let token = req.header("Authorization")?.replace("Bearer ", "") ?? "";
+  // let token = req.header("Authorization")?.replace("Bearer ", "") ?? "";
+  let token = req.body.refreshToken;
   // console.log(
   //   "headers authorization refresh in refresh middleware >>>>> ",
   //   token
