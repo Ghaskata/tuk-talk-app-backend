@@ -11,11 +11,12 @@ const validate =
       next();
     } catch (error: any) {
       if (error instanceof ZodError) {
-        const validationErrors = error.errors.map((err) => ({
-          message: err.message,
-          path: err.path.join("."),
-        }));
-        return commonUtils.sendError(req, res, validationErrors);
+        let validationErrors: { [key: string]: string } = {};
+        error.errors.forEach((err) => {
+          validationErrors[err.path.join(".")] = err.message;
+        });
+        console.log(validationErrors);
+        return commonUtils.sendError(req, res, { errors: validationErrors });
       }
       return commonUtils.sendError(req, res, {
         message: AppStrings.SOMETHING_WENT_WRONG,
@@ -25,3 +26,14 @@ const validate =
   };
 
 export default validate;
+
+// method 1
+// const validationErrors = error.errors.map((err) => ({
+//   message: err.message,
+//   path: err.path.join("."),
+// }));
+
+//method 2
+// const validationErrors = error.errors.map((err) => ({
+//   [err.path.toString()]: err.message,    //////////////also valid
+// }));
