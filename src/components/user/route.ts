@@ -49,7 +49,7 @@ export default [
   },
   {
     path: "/updateProfile",
-    method: "post",
+    method: "patch",
     validation: validate(updateProfileSchema),
     controller: userController.updateProfile,
   },

@@ -1,16 +1,14 @@
-import { AppConstants } from "../../utils/appConstants";
-import commonUtils from "../../utils/commonUtils";
-
-const reactionSchema = new commonUtils.Schema({
-  reactionEmoji: String,
-  reactionerId: {
-    type: commonUtils.ObjectId,
-    ref: "users",
-  },
-});
+import mongoose from "mongoose";
+import { AppConstants } from "../../../utils/appConstants";
+import commonUtils from "../../../utils/commonUtils";
 
 const chatSchema = new commonUtils.Schema(
   {
+    chatId: {
+      type: mongoose.Schema.Types.ObjectId,
+      require: true,
+      ref: "conversations",
+    },
     reciverId: {
       type: commonUtils.ObjectId,
       ref: "users",
@@ -35,7 +33,16 @@ const chatSchema = new commonUtils.Schema(
       require: true,
       comment: "1=text 2=image",
     },
-    reaction: [reactionSchema],
+    reactions: [
+      {
+        type: String,
+      },
+    ],
+    readStatus: {
+      type: Number,
+      default: 0,
+      comment: "0=unread, 1=read",
+    },
     deletedAt: {
       type: Date,
       default: null,

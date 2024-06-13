@@ -1,4 +1,4 @@
-import z from "zod";
+import z, { string } from "zod";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -42,11 +42,15 @@ const registerSchema = z.object({
 });
 
 const updateProfileSchema = z.object({
-  userName: z
-    .string()
-    .trim()
-    .min(3),
-  about: z.string().trim().min(1)
+  userName: z.string().trim().min(3),
+  about: z.string().trim().min(1),
+  image: z.string(),
 });
 
-export { loginSchema, forgotPassSchema, resetPassSchema, registerSchema,updateProfileSchema };
+export {
+  loginSchema,
+  forgotPassSchema,
+  resetPassSchema,
+  registerSchema,
+  updateProfileSchema,
+};

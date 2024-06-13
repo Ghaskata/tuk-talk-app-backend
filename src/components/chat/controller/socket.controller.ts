@@ -4,9 +4,13 @@ import { ConnectedUser } from "../connectedUser";
 import { userMap } from "../../..";
 import { User } from "../../user/models/user.model";
 import commonUtils from "../../../utils/commonUtils";
-import { Chat } from "../chat.model";
+import { Chat } from "../models/chat.model";
 import mongoose, { deleteModel } from "mongoose";
 import moment from "moment";
+import { Conversation } from "../models/conversation.model";
+import chatController from "./chat.controller";
+import user from "../../user";
+import { PipelineStage } from "mongoose";
 
 export const connectionHandler = async (io: Server, client: Socket) => {
   let usersCount = 0;
@@ -28,9 +32,52 @@ export const connectionHandler = async (io: Server, client: Socket) => {
       `User ${userId} connected successfully. Socket ID: ${clientId}`
     );
   } else {
-    console.log("User connection failed. Socket ID: ${clientId}");
+    console.log(`User connection failed. Socket ID: ${clientId}`);
     return false;
   }
+
+  console.log("usermap >>>> ", userMap);
+  console.log("connectedUsers >>>> ", SocketAppConstants.connectedUsers);
+
+  // ************************** HELPER FUNCTIONS *************************** //
+  const createOrFindConversation = async (to: any, from: any) => {
+    const pipline = [
+      {
+        $match: {
+          senderId: new mongoose.Types.ObjectId(from),
+          receiverId: new mongoose.Types.ObjectId(to),
+        },
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "receiverId",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+      {
+        $unwind: {
+          path: "$user",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+    ];
+
+    let conversation = await Conversation.aggregate(pipline);
+    let conv: any;
+    if (conversation.length === 0) {
+      //first time conversation
+      let convChatId = new mongoose.Types.ObjectId();
+
+      //create
+      //end-user
+      const convoDataOther=await Conversation.create({chatId:convChatId,senderId:,reciverId:})
+      //self-user
+    } else {
+      //conversation alredy exist
+    }
+  };
 
   // --------------------------------disconnect-------------------------------
   client.on("disconnect", async function () {
@@ -46,88 +93,299 @@ export const connectionHandler = async (io: Server, client: Socket) => {
       userMap[userId].splice(soketIndex);
     }
 
+    if (userId) {
+      let conversations = await Conversation.find({ senderId: userId });
+
+      conversations.map((conversation: any) =>
+        client.leave(conversation?.chatId?.toString())
+      );
+
+      if (userMap[userId].length === 0) {
+        io.to(
+          conversations.map((value: any) =>
+            value?.chatId.toString().emit("offline", { user_id: userId })
+          )
+        );
+      }
+    }
+
+    client.disconnect(true);
+  });
+
+  // ---------------------------------------online--------------------------------------
+  client.on("online", async (data, ack) => {
+    if (typeof data === "string") {
+      data = JSON.parse(data);
+    }
+    console.log("-----------ONLINE----------", data);
+    let userId = SocketAppConstants.connectedUsers[client.id];
+
+    let soketIndex = userMap[userId]?.findIndex(
+      (value: any) => value === client.id
+    );
+    if (soketIndex !== -1) {
+      userMap[userId].splice(soketIndex);
+    }
+
+    let conversations = await Conversation.find({ senderId: userId });
+
+    conversations.map((conversation: any) =>
+      client.join(conversation?.chatId?.toString())
+    );
+
+    client.join(userId.toString());
+  });
+
+  // ---------------------------------------offline--------------------------------------
+  client.on("offline", async (data, ack) => {
+    if (typeof data === "string") data = JSON.parse(data);
+    console.log("-----------OFFLINE----------", data);
+    let userId = SocketAppConstants.connectedUsers[client.id];
+
+    delete SocketAppConstants.connectedUsers[client.id];
+
+    let conversations = await Conversation.find({ senderId: userId });
+
+    conversations.map((conversation: any) =>
+      client.leave(conversation?.chatId?.toString())
+    );
+
+    if (userMap[userId].length === 0) {
+      io.to(
+        conversations.map((value: any) =>
+          value?.chatId?.toString().emit("offline", data)
+        )
+      );
+    }
+
     client.disconnect(true);
   });
 
   // ---------------------------------------chatMessage (send message)--------------------------------------
   client.on("chatMessage", async function (data: any, ack: any) {
     if (typeof data == "string") data = JSON.parse(data);
+    console.log("---------------chatMessage----------", data);
 
     let userId = SocketAppConstants.connectedUsers[client.id];
     console.log({ userId });
 
-    const { reciverId, parentChatId, message, msgType } = data;
-
     try {
-      if (reciverId && message) {
-        const reciverObjId = commonUtils.convertToObjectId(reciverId);
-        const reciverExist = await User.findOne({
-          _id: reciverObjId,
-          userStatus: 0,
-        }).select("userName about image");
+      const user = await User.findById(userId).select(
+        "_id image userName about"
+      );
 
-        const senderObjId = commonUtils.convertToObjectId(userId);
-        const sender = await User.findById(senderObjId);
+      let chatMessage: any = {
+        senderId: data.userId,
+        reciverId: data.to,
+        message: data.message,
+        msgType: data.type ? data.type : 1,
+        chatId: data.chatId,
+      };
+      console.log({ chatMessage });
 
-        if (reciverExist) {
-          let chat: any = await Chat.create({
-            senderId: userId,
-            reciverId: reciverId,
-            parentChatId: parentChatId,
-            message: message,
-            msgType: msgType ? msgType : 1,
-          });
+      let messageCreated: any = await Chat.create(chatMessage);
 
-          chat = JSON.parse(JSON.stringify(chat)); //deep clone it not change original but cretae new one that deeply cloned orignale
+      let message: any = await chatController.formatChatMessage(messageCreated);
 
-          // chat.reciverName = reciverExist.userName;
-          // chat.reciverImage = reciverExist.image;
-          chat.senderImage = reciverExist.userName;
-          chat.senderImage = reciverExist.image;
+      message.senderDetail = user;
 
-          if (chat.parentChatId) {
-            let oldChat = await Chat.aggregate([
-              {
-                $match: {
-                  _id: new mongoose.Types.ObjectId(parentChatId),
-                },
-              },
-              {
-                $lookup: {
-                  from: "users",
-                  localField: "parentChatId",
-                  foreignField: "_id",
-                  as: "users",
-                },
-              },
-              {
-                $unwind: {
-                  path: "users",
-                  preserveNullAndEmptyArrays: true,
-                },
-              },
-              {
-                $project: {
-                  createdAt: {
-                    $dateToString: {
-                      format: "%Y-%m-%d %H:%M:%S", // Customize the format here
-                      date: "$createdAt",
-                    },
-                  },
-                  message: "$message",
-                },
-              },
-            ]);
-            chat.parentChat = oldChat?.[0];
-          }
+      let reciverIsOnline =
+        SocketAppConstants.userMap[data.to.toString()] !== null ||
+        SocketAppConstants.userMap[data.to.toString()] !== undefined;
 
-          client.to(reciverId.toString()).emit("chatMessage", chat);
-          console.log({ chat });
-          ack(chat);
+      if (reciverIsOnline) {
+        let reciver_client_id = userMap[data.to.toString()][0]?.client_id;
+
+        let reciver: any = await User.findById(data.to).select(
+          "_id image userName about"
+        );
+
+        message.reciverDetail = reciver;
+
+        if (reciver_client_id) {
+          io.to(reciver_client_id).emit("chatMessage", message);
+        } else {
+          //notification of message
         }
+      } else {
+        //notification of message
       }
+
+      console.log({ message });
+      ack(message);
     } catch (error) {
       console.log("chatMessage event Error >>>>> ", error);
+    }
+  });
+
+  // ---------------------------------------listChats ( List of conversations) --------------------------------------//
+  client.on("listChats", async function (data: any, ack: any) {
+    if (typeof data == "string") data = JSON.parse(data);
+    const userId = SocketAppConstants.connectedUsers[client.id];
+    console.log({ userId });
+    console.log("-------------listChats----------", data);
+    const { limit, offset } = data;
+
+    try {
+      let chatIds = await Chat.find({
+        $or: [{ senderId: userId }, { reciverId: userId }],
+      })
+        .sort("updatedAt")
+        .limit(limit)
+        .skip(offset)
+        .distinct("chatId");
+
+      console.log({ chatIds });
+
+      let pipline: PipelineStage[] = [
+        {
+          $match: {
+            senderId: new mongoose.Types.ObjectId(userId),
+            chatId: { $in: chatIds },
+          },
+        },
+        { $skip: offset },
+        { $limit: limit },
+        {
+          $lookup: {
+            from: "users",
+            localField: "receiverId",
+            foreignField: "_id",
+            as: "user",
+          },
+        },
+        {
+          $unwind: { path: "$user", preserveNullAndEmptyArrays: true },
+        },
+        {
+          $lookup: {
+            from: "chats",
+            let: {
+              recId: "$receiverId",
+              user_id: new mongoose.Types.ObjectId(userId),
+            },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $or: [
+                      {
+                        $and: [
+                          { $eq: ["$receiverId", "$$recId"] },
+                          { $eq: ["$senderId", "$$user_id"] },
+                        ],
+                      },
+                      {
+                        $and: [
+                          { $eq: ["$receiverId", "$$user_id"] },
+                          { $eq: ["$senderId", "$$recId"] },
+                        ],
+                      },
+                    ],
+                  },
+                },
+              },
+              {
+                $sort: { createdAt: -1 },
+              },
+              {
+                $limit: 1,
+              },
+            ],
+            as: "message",
+          },
+        },
+        {
+          $unwind: { path: "$message", preserveNullAndEmptyArrays: true },
+        },
+        {
+          $lookup: {
+            from: "chats",
+            let: {
+              recId: "$receiverId",
+              user_id: new mongoose.Types.ObjectId(userId),
+            },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ["$receiverId", "$$user_id"] },
+                      { $eq: ["$senderId", "$$recId"] },
+                      { $eq: ["$readStatus", 0] },
+                    ],
+                  },
+                },
+              },
+              {
+                $count: "unreadCount",
+              },
+              {
+                $project: { unreadCount: 1 },
+              },
+            ],
+            as: "unreadCount",
+          },
+        },
+        { $unwind: { path: "$unreadCount", preserveNullAndEmptyArrays: true } },
+        { $sort: { "message.createdAt": -1 } },
+      ];
+
+      let conversation = await Conversation.aggregate(pipline);
+      console.log({ conversation });
+
+      conversation = conversation.map((value: any) => {
+        return {
+          ...{
+            id: value._id,
+            userId: value.receiverId,
+            userName: value?.user?.userName,
+            chatId: value.chatId,
+            profilePic: value.user?.image ?? "",
+            msgType: value?.message?.msgType ?? 0,
+            email: value.user?.email ?? "",
+            mobile: value?.user?.mobile ?? null,
+            message: value?.message?.message?.toString() ?? "",
+            time: value?.message?.createdAt ?? "",
+            unreadCount: value?.unreadCount?.unreadCount,
+          },
+        };
+      });
+
+      ack(conversation);
+    } catch (e: any) {
+      console.log(e);
+      ack(e.message);
+    }
+  });
+
+  // ---------------------------------------createChat (if get then return | create and return) --------------------------------------//
+  client.on("createChat", async function (data: any, ack: any) {
+    if (typeof data == "string") data = JSON.parse(data);
+    let userId = SocketAppConstants.connectedUsers[client.id];
+    console.log({ userId });
+
+    console.log("-------------createChat----------", data);
+
+    try {
+      let { from, to } = data;
+
+      from = commonUtils.convertToObjectId(from);
+      to = commonUtils.convertToObjectId(to);
+
+      if (!from || !to) return false;
+      if (from === to) return false;
+
+      let user = await User.findById(userId);
+
+      if (!user) return false;
+
+      let conv: any = await createOrFindConversation(to, from);
+
+      ack();
+    } catch (e: any) {
+      console.log(e);
+      ack(e.message);
     }
   });
 

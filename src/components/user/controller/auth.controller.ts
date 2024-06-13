@@ -71,6 +71,15 @@ const login = async (req: Request, res: Response) => {
       );
     }
 
+    if (!userData.password) {
+      return commonUtils.sendError(
+        req,
+        res,
+        { message: AppStrings.INVALID_LOGIN_METHOD },
+        422
+      );
+    }
+
     const valid_password = await userData.isPasswordCorrect(req.body.password);
     if (!valid_password) {
       return commonUtils.sendError(
@@ -228,8 +237,8 @@ const resetPassword = async (req: Request, res: Response) => {
 const refreshToken = async (req: Request, res: Response) => {
   try {
     const payload: UserTokenPayload = res.locals.payload;
-    console.log("--------------------------");
-    console.log("payload in refreshtoken >>>>> ", payload);
+    // console.log("--------------------------");
+    // console.log("payload in refreshtoken >>>>> ", payload);
     const tokenData = await Auth.generateUserAccessToken(payload);
     res.cookie("accessToken", tokenData.accessToken, {
       maxAge: 900000,

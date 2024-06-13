@@ -1,7 +1,9 @@
-import { Response, urlencoded } from "express";
+import { NextFunction, Request, Response, urlencoded } from "express";
 import userRoute from "./components/user";
 import { Socket } from "socket.io";
 import { connectionHandler } from "./components/chat/controller/socket.controller";
+import commonController from "./components/common/common.controller";
+import path from "path";
 
 const express = require("express");
 const mongoose = require("mongoose");
@@ -43,12 +45,20 @@ const io = new Server(server);
 app.use(cors());
 app.use(urlencoded({ extended: true, limit: "50mb" }));
 app.use(express.json({ limit: "50mb" }));
-app.use(express.static("./uploads"));
+// app.use(express.static("./uploads"));
+app.use("/uploads", express.static(path.join(__dirname, "../uploads/")));
 app.use(cookieParser());
 
 app.prefix("/api/v1/users", (route: any) => {
   userRoute(route);
 });
+
+app.post(
+  "/api/v1/uploadImage/:type",
+  async (req: Request, res: Response, next: NextFunction) => {
+    await commonController.uploadImage(req, res, next);
+  }
+);
 
 app.get("/", (req: Request, res: Response) => {
   res.send("server running");

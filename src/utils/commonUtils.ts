@@ -92,11 +92,11 @@ const fileFilter = (
   callback: FileFilterCallback
 ): void => {
   if (
-    file.mimeType === "image/jpg" ||
-    file.mimeType === "image/jpeg" ||
-    file.mimeType === "image/png" ||
-    file.mimeType === "image/webp" ||
-    file.mimeType === "image/svg+xml"
+    file.mimetype === "image/jpg" ||
+    file.mimetype === "image/jpeg" ||
+    file.mimetype === "image/png" ||
+    file.mimetype === "image/webp" ||
+    file.mimetype === "image/svg+xml"
   ) {
     callback(null, true);
   } else {

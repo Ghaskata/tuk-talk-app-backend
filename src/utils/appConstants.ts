@@ -10,6 +10,7 @@ export const AppConstants = {
   MODEL_LOGIN_HISTORY: "LoginHistory",
 
   MODEL_CHAT: "Chat",
+  MODEL_CONVERSATION: "Conversation",
 };
 
 export class SocketAppConstants {
