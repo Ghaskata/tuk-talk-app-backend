@@ -4,9 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon src/index.ts",
-    "start:dev": "cross-env NODE-ENV=development nodemon src/index.ts"
+  "build": "tsc",
+  "start": "node dist/index.js",
+  "start:dev": "cross-env NODE_ENV=development nodemon src/index.ts"
   },
   "author": "archana",
   "license": "ISC",
