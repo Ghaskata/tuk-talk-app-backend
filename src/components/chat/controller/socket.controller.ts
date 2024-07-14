@@ -1,7 +1,6 @@
 import { Server, Socket } from "socket.io";
 import { SocketAppConstants } from "../../../utils/appConstants";
 import { ConnectedUser } from "../connectedUser";
-import { userMap } from "../../..";
 import { User } from "../../user/models/user.model";
 import commonUtils from "../../../utils/commonUtils";
 import { Chat } from "../models/chat.model";
@@ -11,6 +10,8 @@ import { Conversation } from "../models/conversation.model";
 import chatController from "./chat.controller";
 import user from "../../user";
 import { PipelineStage } from "mongoose";
+import { deviceToken } from "../../user/models/deviceToken";
+import commonController from "../../common/common.controller";
 
 export const connectionHandler = async (io: Server, client: Socket) => {
   let usersCount = 0;
@@ -18,26 +19,41 @@ export const connectionHandler = async (io: Server, client: Socket) => {
 
   let clientId = client.id;
   console.log("clientId >>> ", clientId);
-  // console.log("client >>> ", client);
 
-  if (userId && userId != "0") {
-    if (userMap[userId] === undefined) userMap[userId] = [];
-    if (!userMap[userId].includes(clientId)) {
-      userMap[userId].push(clientId);
-    }
-
-    SocketAppConstants.connectedUsers[clientId] = userId;
-    SocketAppConstants.userMap[userId] = new ConnectedUser(userId, clientId);
+  if (!userId || userId === "0") {
     console.log(
-      `User ${userId} connected successfully. Socket ID: ${clientId}`
+      `User connection failed. Invalid userId: ${userId}, Socket ID: ${clientId}`
     );
-  } else {
-    console.log(`User connection failed. Socket ID: ${clientId}`);
     return false;
   }
 
-  console.log("usermap >>>> ", userMap);
-  console.log("connectedUsers >>>> ", SocketAppConstants.connectedUsers);
+  // console.log(
+  //   `Before connection: usermap >>>> ${JSON.stringify(
+  //     SocketAppConstants.userMap,
+  //     null,
+  //     2
+  //   )}`
+  // );
+
+  if (!SocketAppConstants.userMap[userId]) {
+    SocketAppConstants.userMap[userId] = [];
+  }
+  if (!SocketAppConstants.userMap[userId].includes(clientId)) {
+    SocketAppConstants.userMap[userId].push(clientId);
+  }
+
+  SocketAppConstants.connectedUsers[clientId] = userId;
+
+  console.log(`User ${userId} connected successfully. Socket ID: ${clientId}`);
+
+  console.log(
+    "After connection: userMap >>>> ",
+    JSON.stringify(SocketAppConstants.userMap, null, 2)
+  );
+  console.log(
+    "connectedUsers >>>> ",
+    JSON.stringify(SocketAppConstants.connectedUsers, null, 2)
+  );
 
   // ************************** HELPER FUNCTIONS *************************** //
   const createOrFindConversation = async (to: any, from: any) => {
@@ -45,13 +61,13 @@ export const connectionHandler = async (io: Server, client: Socket) => {
       {
         $match: {
           senderId: new mongoose.Types.ObjectId(from),
-          receiverId: new mongoose.Types.ObjectId(to),
+          reciverId: new mongoose.Types.ObjectId(to),
         },
       },
       {
         $lookup: {
           from: "users",
-          localField: "receiverId",
+          localField: "reciverId",
           foreignField: "_id",
           as: "user",
         },
@@ -72,25 +88,104 @@ export const connectionHandler = async (io: Server, client: Socket) => {
 
       //create
       //end-user
-      const convoDataOther=await Conversation.create({chatId:convChatId,senderId:,reciverId:})
+      const convoDataOther = await Conversation.create({
+        chatId: convChatId,
+        senderId: to,
+        reciverId: from,
+      });
+
       //self-user
+      const convMe = await Conversation.create({
+        chatId: convChatId,
+        senderId: from,
+        reciverId: to,
+      });
+
+      const user = await User.findById(to)
+        .select("_id userName about image mobile email")
+        .lean();
+
+      if (!user) {
+        throw new Error("user not found");
+      }
+      conv = {
+        ...convMe.toObject(),
+        user: {
+          reciverId: user._id,
+          userName: user.userName,
+          about: user.about,
+          image: user.image,
+          mobile: user.mobile,
+          email: user.email,
+        },
+      };
+      conv.exist_conversation = 0;
     } else {
       //conversation alredy exist
+      // const readAllChat = await Chat.updateMany(
+      //   {
+      //     chatId: conversation[0].chatId,
+      //     senderId: new mongoose.Types.ObjectId(to),
+      //     reciverId: new mongoose.Types.ObjectId(from),
+      //     readStatus: 0,
+      //   },
+      //   {
+      //     $set: {
+      //       readStatus: 1,
+      //     },
+      //   },
+      //   { new: true }
+      // );
+      conv = conversation[0];
+      conv.exist_conversation = 1;
     }
+
+    conv.id = conv._id;
+    conv.isOnline = !!SocketAppConstants.userMap[conv.reciverId];
+    conv.createdDate = moment(conv.createdAt).format("YYYY-MM-DD HH:mm:ss");
+    conv.updatedDate = moment(conv.updatedAt).format("YYYY-MM-DD HH:mm:ss");
+    conv.success = true;
+
+    SocketAppConstants.userMap[conv.reciverId.toString()]?.map((v: any) => {
+      // io.sockets.sockets.get(v.client_id)?.join(conv.chatId.toString());
+      io.sockets.sockets.get(v)?.join(conv.chatId.toString());
+    });
+    SocketAppConstants.userMap[conv.senderId.toString()]?.map((v: any) => {
+      // io.sockets.sockets.get(v.client_id)?.join(conv.chatId.toString());
+      io.sockets.sockets.get(v)?.join(conv.chatId.toString());
+    });
+
+    return conv;
   };
 
   // --------------------------------disconnect-------------------------------
   client.on("disconnect", async function () {
-    console.log("-----------DISCONNECT-----------");
+    // console.log("-----------DISCONNECT-----------");
     let userId = SocketAppConstants.connectedUsers[client.id];
+
+    if (!userId) {
+      console.log(`User ID not found for client ID: ${client.id}`);
+      return;
+    }
+    console.log(`Disconnecting client ID: ${client.id} for user ID: ${userId}`);
 
     delete SocketAppConstants.connectedUsers[client.id];
 
-    let soketIndex = userMap[userId]?.findIndex(
-      (value: any) => value === client.id
-    );
-    if (soketIndex !== -1) {
-      userMap[userId].splice(soketIndex);
+    let soketIndex = SocketAppConstants.userMap[userId]?.indexOf(client.id);
+
+    if (soketIndex !== -1 && soketIndex !== undefined) {
+      SocketAppConstants.userMap[userId].splice(soketIndex, 1);
+      console.log(`Removed client ID: ${client.id} from userMap[${userId}]`);
+    } else {
+      console.log(`Client ID: ${client.id} not found in userMap[${userId}]`);
+    }
+
+    if (
+      SocketAppConstants.userMap[userId] &&
+      SocketAppConstants.userMap[userId]?.length === 0
+    ) {
+      delete SocketAppConstants.userMap[userId];
+      console.log(`User ID: ${userId} completely removed from userMap`);
     }
 
     if (userId) {
@@ -100,12 +195,18 @@ export const connectionHandler = async (io: Server, client: Socket) => {
         client.leave(conversation?.chatId?.toString())
       );
 
-      if (userMap[userId].length === 0) {
-        io.to(
-          conversations.map((value: any) =>
-            value?.chatId.toString().emit("offline", { user_id: userId })
-          )
-        );
+      if (conversations.length > 0) {
+        // io.to(
+        //   conversations.map((value: any) =>
+        //     value?.chatId.toString().emit("offline", { user_id: userId })
+        //   )
+        // );
+        conversations.forEach((conversation: any) => {
+          const chatIdString = conversation?.chatId.toString();
+          if (chatIdString) {
+            io.to(chatIdString).emit("offline", { user_id: userId });
+          }
+        });
       }
     }
 
@@ -117,15 +218,8 @@ export const connectionHandler = async (io: Server, client: Socket) => {
     if (typeof data === "string") {
       data = JSON.parse(data);
     }
-    console.log("-----------ONLINE----------", data);
+    // console.log("-----------ONLINE----------", data);
     let userId = SocketAppConstants.connectedUsers[client.id];
-
-    let soketIndex = userMap[userId]?.findIndex(
-      (value: any) => value === client.id
-    );
-    if (soketIndex !== -1) {
-      userMap[userId].splice(soketIndex);
-    }
 
     let conversations = await Conversation.find({ senderId: userId });
 
@@ -134,15 +228,30 @@ export const connectionHandler = async (io: Server, client: Socket) => {
     );
 
     client.join(userId.toString());
+    conversations.forEach((conversation: any) => {
+      io.to(conversation?.chatId.toString()).emit("online", {
+        userId,
+        ...data,
+      });
+    });
   });
 
   // ---------------------------------------offline--------------------------------------
   client.on("offline", async (data, ack) => {
     if (typeof data === "string") data = JSON.parse(data);
-    console.log("-----------OFFLINE----------", data);
+    // console.log("-----------OFFLINE----------", data);
     let userId = SocketAppConstants.connectedUsers[client.id];
 
     delete SocketAppConstants.connectedUsers[client.id];
+
+    let socketIndex = SocketAppConstants.userMap[userId]?.indexOf(client.id);
+
+    console.log("REMOVED_INDEX ", socketIndex);
+
+    if (socketIndex !== -1) {
+      SocketAppConstants.userMap[userId].splice(socketIndex, 1);
+    }
+    console.log("AFTER_REMOVED ", SocketAppConstants.userMap[userId]);
 
     let conversations = await Conversation.find({ senderId: userId });
 
@@ -150,38 +259,40 @@ export const connectionHandler = async (io: Server, client: Socket) => {
       client.leave(conversation?.chatId?.toString())
     );
 
-    if (userMap[userId].length === 0) {
+    if (SocketAppConstants.userMap[userId].length === 0) {
       io.to(
         conversations.map((value: any) =>
           value?.chatId?.toString().emit("offline", data)
         )
       );
     }
-
     client.disconnect(true);
   });
 
   // ---------------------------------------chatMessage (send message)--------------------------------------
   client.on("chatMessage", async function (data: any, ack: any) {
     if (typeof data == "string") data = JSON.parse(data);
-    console.log("---------------chatMessage----------", data);
+    // console.log("---------------chatMessage----------", data);
 
     let userId = SocketAppConstants.connectedUsers[client.id];
-    console.log({ userId });
+    // console.log({ userId });
 
     try {
       const user = await User.findById(userId).select(
         "_id image userName about"
       );
+      let reciver: any = await User.findById(data.to).select(
+        "_id image userName about"
+      );
 
       let chatMessage: any = {
-        senderId: data.userId,
+        senderId: userId,
         reciverId: data.to,
         message: data.message,
         msgType: data.type ? data.type : 1,
         chatId: data.chatId,
       };
-      console.log({ chatMessage });
+      // console.log({ chatMessage });
 
       let messageCreated: any = await Chat.create(chatMessage);
 
@@ -189,32 +300,62 @@ export const connectionHandler = async (io: Server, client: Socket) => {
 
       message.senderDetail = user;
 
-      let reciverIsOnline =
-        SocketAppConstants.userMap[data.to.toString()] !== null ||
-        SocketAppConstants.userMap[data.to.toString()] !== undefined;
+      const handleNotification = async () => {
+        const tokenRecord = await deviceToken.findOne({ userId: data.to });
+
+        if (!tokenRecord || !tokenRecord.token) {
+          throw new Error("Token not found or invalid");
+        }
+
+        const token = tokenRecord.token;
+        let user_ = {
+          _id: data.to,
+          token: token,
+          message: message,
+        };
+
+        const msg = {
+          notification: {
+            title: "Tuk Tuk",
+            body: data.message.toString(),
+          },
+          data: {
+            message: JSON.stringify(message),
+            id: String(message?.id),
+            chat_id: String(data.chatId),
+            sender: JSON.stringify(user),
+          },
+        };
+
+        console.log({ msg });
+        await commonController.sendNotification(userId, user_, msg);
+      };
+
+      let reciverIsOnline = !!SocketAppConstants.userMap[data.to.toString()];
 
       if (reciverIsOnline) {
-        let reciver_client_id = userMap[data.to.toString()][0]?.client_id;
-
-        let reciver: any = await User.findById(data.to).select(
-          "_id image userName about"
-        );
+        let reciver_client_ids = SocketAppConstants.userMap[data.to.toString()];
 
         message.reciverDetail = reciver;
 
-        if (reciver_client_id) {
-          io.to(reciver_client_id).emit("chatMessage", message);
+        if (reciver_client_ids && reciver_client_ids.length > 0) {
+          reciver_client_ids.forEach((client_id) => {
+            io.to(client_id).emit("chatMessage", message);
+          });
         } else {
-          //notification of message
+          //notification
+          await handleNotification();
         }
       } else {
         //notification of message
+        await handleNotification();
       }
 
-      console.log({ message });
+      // console.log({ message });
       ack(message);
-    } catch (error) {
-      console.log("chatMessage event Error >>>>> ", error);
+    } catch (e: any) {
+      console.log("chatMessage event Error >>>>> ", e);
+      ack(new Error(e.message));
     }
   });
 
@@ -222,20 +363,16 @@ export const connectionHandler = async (io: Server, client: Socket) => {
   client.on("listChats", async function (data: any, ack: any) {
     if (typeof data == "string") data = JSON.parse(data);
     const userId = SocketAppConstants.connectedUsers[client.id];
-    console.log({ userId });
-    console.log("-------------listChats----------", data);
-    const { limit, offset } = data;
+    // console.log({ userId });
+    // console.log("-------------listChats----------", data);
+    // const { limit, offset } = data;
 
     try {
-      let chatIds = await Chat.find({
+      let chatIds = await Conversation.find({
         $or: [{ senderId: userId }, { reciverId: userId }],
-      })
-        .sort("updatedAt")
-        .limit(limit)
-        .skip(offset)
-        .distinct("chatId");
+      }).distinct("chatId");
 
-      console.log({ chatIds });
+      // console.log({ userId, chatIds });
 
       let pipline: PipelineStage[] = [
         {
@@ -244,12 +381,12 @@ export const connectionHandler = async (io: Server, client: Socket) => {
             chatId: { $in: chatIds },
           },
         },
-        { $skip: offset },
-        { $limit: limit },
+        // { $skip: offset },
+        // { $limit: limit },
         {
           $lookup: {
             from: "users",
-            localField: "receiverId",
+            localField: "reciverId",
             foreignField: "_id",
             as: "user",
           },
@@ -261,7 +398,7 @@ export const connectionHandler = async (io: Server, client: Socket) => {
           $lookup: {
             from: "chats",
             let: {
-              recId: "$receiverId",
+              recId: "$reciverId",
               user_id: new mongoose.Types.ObjectId(userId),
             },
             pipeline: [
@@ -271,13 +408,13 @@ export const connectionHandler = async (io: Server, client: Socket) => {
                     $or: [
                       {
                         $and: [
-                          { $eq: ["$receiverId", "$$recId"] },
+                          { $eq: ["$reciverId", "$$recId"] },
                           { $eq: ["$senderId", "$$user_id"] },
                         ],
                       },
                       {
                         $and: [
-                          { $eq: ["$receiverId", "$$user_id"] },
+                          { $eq: ["$reciverId", "$$user_id"] },
                           { $eq: ["$senderId", "$$recId"] },
                         ],
                       },
@@ -302,7 +439,7 @@ export const connectionHandler = async (io: Server, client: Socket) => {
           $lookup: {
             from: "chats",
             let: {
-              recId: "$receiverId",
+              recId: "$reciverId",
               user_id: new mongoose.Types.ObjectId(userId),
             },
             pipeline: [
@@ -310,7 +447,7 @@ export const connectionHandler = async (io: Server, client: Socket) => {
                 $match: {
                   $expr: {
                     $and: [
-                      { $eq: ["$receiverId", "$$user_id"] },
+                      { $eq: ["$reciverId", "$$user_id"] },
                       { $eq: ["$senderId", "$$recId"] },
                       { $eq: ["$readStatus", 0] },
                     ],
@@ -332,30 +469,79 @@ export const connectionHandler = async (io: Server, client: Socket) => {
       ];
 
       let conversation = await Conversation.aggregate(pipline);
-      console.log({ conversation });
+      // console.log({ userId, conversation });
 
       conversation = conversation.map((value: any) => {
         return {
           ...{
             id: value._id,
-            userId: value.receiverId,
+            userId: value.reciverId,
             userName: value?.user?.userName,
+            isOnline: !!SocketAppConstants.userMap[value.reciverId],
             chatId: value.chatId,
             profilePic: value.user?.image ?? "",
             msgType: value?.message?.msgType ?? 0,
             email: value.user?.email ?? "",
             mobile: value?.user?.mobile ?? null,
             message: value?.message?.message?.toString() ?? "",
-            time: value?.message?.createdAt ?? "",
+            time:
+              chatController.formatMessageTime(value?.message?.createdAt) ?? "",
             unreadCount: value?.unreadCount?.unreadCount,
           },
         };
       });
 
+      // console.log({ userId, conversation });
+
       ack(conversation);
     } catch (e: any) {
       console.log(e);
-      ack(e.message);
+      ack(new Error(e.message));
+    }
+  });
+
+  // ---------------------------------------listChats option that people suggestions means that peopele to whome never conversation start  --------------------------------------//
+  client.on("listSuggestionChats", async function (data: any, ack: any) {
+    if (typeof data == "string") data = JSON.parse(data);
+    const userId = SocketAppConstants.connectedUsers[client.id];
+    // console.log({ userId });
+    // console.log("-------------listSuggestionChats----------", data);
+    // const { limit, offset } = data;
+
+    try {
+      const usersInConversations = await Conversation.find({
+        $or: [{ senderId: userId }, { receiverId: userId }],
+      }).select("senderId reciverId");
+
+      const usersInConversationsIds: string[] = usersInConversations
+        .map((conv: any) => {
+          if (conv.senderId && conv.senderId.toString() !== userId) {
+            return conv.senderId.toString();
+          }
+          if (conv.reciverId && conv.reciverId.toString() !== userId) {
+            return conv.reciverId.toString();
+          }
+          return null;
+        })
+        .filter((id) => id !== null) as string[];
+
+      // console.log({ userId });
+      // console.log({ usersInConversations });
+      // console.log({ usersInConversationsIds });
+      usersInConversationsIds.push(userId.toString());
+
+      const userSuggestions = await User.find({
+        _id: { $nin: usersInConversationsIds },
+      });
+      // .skip(offset)
+      // .limit(limit);
+
+      // console.log({ userSuggestions });
+
+      ack(userSuggestions);
+    } catch (e: any) {
+      console.log(e);
+      ack(new Error(e.message));
     }
   });
 
@@ -363,9 +549,9 @@ export const connectionHandler = async (io: Server, client: Socket) => {
   client.on("createChat", async function (data: any, ack: any) {
     if (typeof data == "string") data = JSON.parse(data);
     let userId = SocketAppConstants.connectedUsers[client.id];
-    console.log({ userId });
+    // console.log({ userId });
 
-    console.log("-------------createChat----------", data);
+    // console.log("-------------createChat----------", data);
 
     try {
       let { from, to } = data;
@@ -373,19 +559,69 @@ export const connectionHandler = async (io: Server, client: Socket) => {
       from = commonUtils.convertToObjectId(from);
       to = commonUtils.convertToObjectId(to);
 
-      if (!from || !to) return false;
-      if (from === to) return false;
+      if (!from || !to || from === to) {
+        throw new Error("Invalid from or to ObjectId");
+      }
 
       let user = await User.findById(userId);
 
-      if (!user) return false;
+      if (!user) {
+        throw new Error("User not found");
+      }
 
+      // if (!from || !to) return false;
+      // if (from === to) return false;
+
+      // let user = await User.findById(userId);
+
+      // if (!user) return false;
       let conv: any = await createOrFindConversation(to, from);
 
-      ack();
+      let convObject = {
+        id: conv.id,
+        userId: conv.reciverId,
+        chatId: conv.chatId,
+        isOnline: conv.isOnline,
+        profilePic: conv.user?.image ?? "",
+        username: conv.user?.userName,
+        createdDate: conv.createdDate,
+        updatedDate: conv.updatedDate,
+        email: conv?.user?.email ?? "",
+        mobile: conv?.user?.mobile ?? 0,
+        exist_conversation: conv.exist_conversation,
+      };
+
+      ack(convObject);
     } catch (e: any) {
       console.log(e);
-      ack(e.message);
+      ack(new Error(e.message));
+    }
+  });
+
+  // -----------------------------------readAllMessages----------------------------------
+  client.on("readAllMessages", async function (data: any, ack: any) {
+    if (typeof data === "string") data = JSON.parse(data);
+
+    const userId = SocketAppConstants.connectedUsers[client.id];
+
+    const { chat_id, user_id } = data;
+
+    try {
+      const chat = await Chat.updateMany(
+        {
+          chatId: chat_id,
+          reciverId: userId,
+          senderId: user_id,
+          readStatus: 0,
+        },
+        {
+          $set: { readStatus: 1 },
+        },
+        { new: true }
+      );
+      ack(true);
+    } catch (error) {
+      console.log("readAllMessages event Error >>>>> ", error);
     }
   });
 

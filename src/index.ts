@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response, urlencoded } from "express";
 import userRoute from "./components/user";
+import chatRoute from "./components/chat";
 import { Socket } from "socket.io";
 import { connectionHandler } from "./components/chat/controller/socket.controller";
 import commonController from "./components/common/common.controller";
@@ -51,6 +52,9 @@ app.use(cookieParser());
 
 app.prefix("/api/v1/users", (route: any) => {
   userRoute(route);
+});
+app.prefix("/api/v1/chat", (route: any) => {
+  chatRoute(route);
 });
 
 app.post(

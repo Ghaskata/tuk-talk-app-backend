@@ -5,6 +5,8 @@ import mongoose from "mongoose";
 import { UserTokenPayload } from "../../../auth/models";
 import { Conversation } from "../models/conversation.model";
 import commonUtils from "../../../utils/commonUtils";
+import { User } from "../../user/models/user.model";
+import { deviceToken } from "../../user/models/deviceToken";
 
 const listConversation = async (req: Request, res: Response) => {
   let payloadData: UserTokenPayload = res.locals.payload;
@@ -158,7 +160,7 @@ const listConversation = async (req: Request, res: Response) => {
 
 const formatChatMessage = async (chatMessage: any) => {
   let oldChat;
-  if (chatMessage.parentChatId) {
+  if (chatMessage.parentChatId !== null) {
     oldChat = await Chat.aggregate([
       {
         $match: {
@@ -194,33 +196,79 @@ const formatChatMessage = async (chatMessage: any) => {
           time: {
             $dateToString: { format: "%Y-%m-%d %H:%M:%S", date: "$createdAt" },
           },
-          to: "$receiverId",
+          to: "$reciverId",
           from: "$senderId",
           chatId: 1,
           type: 1,
           reactions: 1,
           parentChatId: 1,
           senderDetail: { $arrayElemAt: ["$senderDetail", 0] },
-          receiverDetail: { $arrayElemAt: ["$receiverDetail", 0] },
+          receiverDetail: { $arrayElemAt: ["$reciverDetail", 0] },
         },
       },
     ]);
   }
+  // console.log({ oldChat });
 
   return {
     id: chatMessage._id,
     message: chatMessage.message,
     time: moment(chatMessage.createdAt).format("YYYY-MM-DD HH:mm:ss"),
-    to: chatMessage.receiverId,
+    to: chatMessage.reciverId,
     from: chatMessage.senderId,
     chatId: chatMessage.chatId,
     type: chatMessage.type,
     reactions: chatMessage.reactions,
-    parentChatId: chatMessage.parentChatId && oldChat?.[0],
+    parentChatId:
+      chatMessage.parentChatId === null
+        ? chatMessage.parentChatId
+        : oldChat?.[0],
+    // parentChatId: chatMessage.parentChatId,
+    readStatus: chatMessage?.readStatus,
   };
+};
+
+const listMessages = async (req: Request, res: Response) => {
+  const { chatId } = req.params;
+  // const { limit, offset } = req.query;
+
+  let chatMessages = await Chat.find({
+    chatId: chatId,
+  }).sort({ createdAt: -1 });
+
+  let messages = await Promise.all(
+    chatMessages.map((value: any) => formatChatMessage(value))
+  );
+
+  // console.log({ chatMessages });
+  // console.log({ messages });
+  return commonUtils.sendSuccess(req, res, messages);
+};
+
+const formatMessageTime = (createdAt: any) => {
+  const now = moment();
+  const messageTime = moment(createdAt);
+
+  const diffInSeconds = now.diff(messageTime, "seconds");
+  const diffInMinutes = now.diff(messageTime, "minutes");
+  const diffInHours = now.diff(messageTime, "hours");
+  const diffInDays = now.diff(messageTime, "days");
+  const diffInMonths = now.diff(messageTime, "months");
+
+  if (diffInMinutes < 60) {
+    return messageTime.format("mm:ss");
+  } else if (diffInHours < 24) {
+    return `${moment.duration(diffInHours, "hours").humanize()} ago`;
+  } else if (diffInDays < 30) {
+    return `${moment.duration(diffInDays, "days").humanize()} ago`;
+  } else {
+    return messageTime.format("DD/MM/YYYY");
+  }
 };
 
 export default {
   formatChatMessage,
   listConversation,
+  listMessages,
+  formatMessageTime,
 };

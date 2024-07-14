@@ -4,6 +4,8 @@ import multer from "multer";
 import commonUtils from "../../utils/commonUtils";
 import path from "path";
 import { AppStrings } from "../../utils/appStrings";
+import { UserTokenPayload } from "../../auth/models";
+import admin from "../../firebaseConfig";
 const fs = require("fs");
 
 // UPLOAD IMAGE API
@@ -63,4 +65,18 @@ const uploadImage = async (req: Request, res: Response, next: NextFunction) => {
   });
 };
 
-export default { uploadImage };
+const sendNotification = async (senderId: any, user: any, message: any) => {
+  if (user.token != null) {
+    await admin
+      .messaging()
+      .sendToDevice(user.token, message)
+      .then((response: any) => {
+        console.log("send notification success", response.results);
+      })
+      .catch((err: any) => {
+        console.log("send notification errro", err);
+      });
+  }
+};
+
+export default { uploadImage, sendNotification };

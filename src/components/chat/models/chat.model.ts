@@ -22,6 +22,7 @@ const chatSchema = new commonUtils.Schema(
     parentChatId: {
       type: commonUtils.ObjectId,
       ref: "chats",
+      default: null,
     },
     message: {
       type: String,

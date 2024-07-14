@@ -8,12 +8,14 @@ export const AppConstants = {
   MODEL_USER: "User",
   MODEL_ADMIN: "Admin",
   MODEL_LOGIN_HISTORY: "LoginHistory",
+  MODEL_DEVICE_TOKEN: "DeviceToken",
 
   MODEL_CHAT: "Chat",
   MODEL_CONVERSATION: "Conversation",
 };
 
 export class SocketAppConstants {
-  public static connectedUsers: { [key: string]: string } = {};
-  public static userMap: { [userKey: string]: ConnectedUser } = {};
+  public static connectedUsers: { [clientId: string]: string } = {};
+  // public static userMap: { [userKey: string]: ConnectedUser } = {};
+  public static userMap: { [userId: string]: string[] } = {};
 }

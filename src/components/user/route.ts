@@ -53,4 +53,9 @@ export default [
     validation: validate(updateProfileSchema),
     controller: userController.updateProfile,
   },
+  {
+    path: "/addDeviceToken",
+    method: "patch",
+    controller: userController.addDeviceToken,
+  },
 ];
